@@ -12,7 +12,7 @@ import (
 )
 
 type Data struct {
-	Answer string
+	Answer []string
 }
 
 // Vars that need to be global
@@ -48,7 +48,7 @@ func readWords(wordFile string) map[string][]string {
 
 func formHandler(w http.ResponseWriter, r *http.Request) {
     query := r.FormValue("search")
-	answer:= fmt.Sprintf("%s", wordHash[hash(query)])
+	answer:= wordHash[hash(query)]
 	d := &Data{Answer: answer}
 	t, _ := template.ParseFiles("index.html")
 	t.Execute(w, d)
@@ -59,13 +59,15 @@ func main() {
 	// Check environment variables
 	httpPort := os.Getenv("PORT")
 	if httpPort == "" {
-		httpPort = ":8080"
+		httpPort = "8080"
 	}
+	address := fmt.Sprintf("%s:%s", "0.0.0.0", httpPort)
 	wordFile := os.Getenv("WORDFILE")
 	if wordFile == "" {
 		wordFile = "/words"
 	}
 	wordHash = readWords(wordFile)
+	fmt.Printf("Read %v words\n", len(wordHash))
     http.HandleFunc("/", formHandler)
-	log.Fatal(http.ListenAndServe(httpPort, nil))
+	log.Fatal(http.ListenAndServe(address, nil))
 }
