@@ -1,11 +1,7 @@
 FROM golang
 WORKDIR /app
 
-COPY go.mod ./
-RUN go mod download
-
-COPY *.go *.html ./
-COPY words /words
+COPY words *.go *.html ./
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /jumble
 

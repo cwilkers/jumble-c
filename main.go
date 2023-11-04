@@ -46,6 +46,22 @@ func readWords(wordFile string) map[string][]string {
 	return wordHash
 }
 
+// Subdivide guesses to come up with more answers
+func divide(q string) []string {
+    l := len(q)
+	var answer []string
+	if l > 2 {
+        a := strings.Split(q, "")
+		append(answer, wordHash[strings.Join(a[1:l-1], "")])
+        for i:= 1; i < l-2; i++ {
+		    append(answer, wordHash[strings.Join(a[0:i]+a[i+1,l], "")])
+		}
+		append(answer, wordHash[strings.Join(a[0:l-2], "")])
+	}
+	return answer
+}
+
+// handle / and run queries
 func formHandler(w http.ResponseWriter, r *http.Request) {
     query := r.FormValue("search")
 	answer:= wordHash[hash(query)]
@@ -64,7 +80,7 @@ func main() {
 	address := fmt.Sprintf("%s:%s", "0.0.0.0", httpPort)
 	wordFile := os.Getenv("WORDFILE")
 	if wordFile == "" {
-		wordFile = "/words"
+		wordFile = "words"
 	}
 	wordHash = readWords(wordFile)
 	fmt.Printf("Read %v words\n", len(wordHash))
