@@ -2,17 +2,23 @@ package main
 
 import (
 	"bufio"
+	"cmp"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 )
 
 type Data struct {
 	Answer []string
+}
+
+type Health struct {
+	Words int
 }
 
 // Vars that need to be global
@@ -21,7 +27,7 @@ var wordHash map[string][]string
 // Hash function that alphabetizes letters in a word
 func hash(s string) string {
 	a := strings.Split(s, "")
-	sort.Strings(a)
+	slices.Sort(a)
 	return strings.Join(a, "")
 }
 
@@ -46,28 +52,61 @@ func readWords(wordFile string) map[string][]string {
 	return wordHash
 }
 
-// Subdivide guesses to come up with more answers
-func divide(q string) []string {
-    l := len(q)
-	var answer []string
-	if l > 2 {
-        a := strings.Split(q, "")
-		append(answer, wordHash[strings.Join(a[1:l-1], "")])
-        for i:= 1; i < l-2; i++ {
-		    append(answer, wordHash[strings.Join(a[0:i]+a[i+1,l], "")])
+func deDupe(a []string) []string {
+	existList := make(map[string]bool)
+	list := []string{}
+	for _, i := range a {
+		if _, v := existList[i]; !v {
+			existList[i] = true
+			list = append(list, i)
 		}
-		append(answer, wordHash[strings.Join(a[0:l-2], "")])
+	}
+	comparator := func(a, b string) int {
+		c := cmp.Compare(len(b), len(a))
+		if c == 0 {
+			return cmp.Compare(a, b)
+		} else {
+		    return c
+		}
+	}
+	slices.SortFunc(list, comparator)
+	return list
+}
+
+func findAnswers(query string) []string {
+	answer := wordHash[query]
+	l := len(query)
+	if l > 3 {
+		a := strings.Split(query, "")
+		answer = append(answer, findAnswers(strings.Join(a[1:l], ""))...)
+		for i := 1; i < l-1; i++ {
+			b := make([]string, l-1)
+			copy(b, a[0:i])
+			b = append(b, a[i+1:l]...)
+			answer = append(answer, findAnswers(strings.Join(b, ""))...)
+		}
+		answer = append(answer, findAnswers(strings.Join(a[0:l-1], ""))...)
 	}
 	return answer
 }
 
-// handle / and run queries
 func formHandler(w http.ResponseWriter, r *http.Request) {
-    query := r.FormValue("search")
-	answer:= wordHash[hash(query)]
-	d := &Data{Answer: answer}
+	query := r.FormValue("search")
 	t, _ := template.ParseFiles("index.html")
-	t.Execute(w, d)
+	t.Execute(w, &Data{Answer: deDupe(findAnswers(hash(query)))})
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+    health := Health{
+		Words: len(wordHash),
+	}
+	j,_ := json.MarshalIndent(health, "", "  ")
+	if health.Words > 0 {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	fmt.Fprint(w, string(j))
 }
 
 // Set up a webserver
@@ -83,7 +122,7 @@ func main() {
 		wordFile = "words"
 	}
 	wordHash = readWords(wordFile)
-	fmt.Printf("Read %v words\n", len(wordHash))
-    http.HandleFunc("/", formHandler)
+	http.HandleFunc("/", formHandler)
+	http.HandleFunc("/health", healthHandler)
 	log.Fatal(http.ListenAndServe(address, nil))
 }
